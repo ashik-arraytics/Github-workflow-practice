@@ -1,0 +1,16 @@
+name: Workflow Inventory
+
+on:
+  workflow_dispatch:
+env:
+  cloud: aws
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    env:
+      name: Ashik
+    steps:
+      - name: "Display a hello message"
+        env:
+          greeting: "Hello"
+        run: echo "${{ env.greeting }}, ${{ env.name }}! The cloud variable is set to ${{ env.cloud }}"
