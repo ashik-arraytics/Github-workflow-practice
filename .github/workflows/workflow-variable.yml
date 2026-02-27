@@ -1,7 +1,7 @@
 name: Workflow Inventory
 
-on:
-  workflow_dispatch:
+on: workflow_dispatch
+
 env:
   cloud: aws
 jobs:
