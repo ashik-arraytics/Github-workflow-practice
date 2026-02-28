@@ -409,13 +409,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install Python dependencies
-        run: pip3 install requests
+      - name: Check Python and install dependencies
+        run: |
+          python3 --version
+          pip3 install requests --quiet --break-system-packages 2>/dev/null || pip3 install requests --quiet
 
       - name: Verify Ollama is running
         run: |
