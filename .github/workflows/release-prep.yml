@@ -331,7 +331,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
-        run: pip install google-generativeai requests
+        run: pip install google-genai requests
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -344,18 +344,11 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python3 -c "
-          import json, re, os
-          import google.generativeai as genai
+          import json, re, os, time
+          from google import genai
           from datetime import datetime
 
-          genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-          model = genai.GenerativeModel(
-              model_name='gemini-2.0-flash',
-              generation_config=genai.types.GenerationConfig(
-                  max_output_tokens=4096,
-                  temperature=0.3
-              )
-          )
+          client = genai.Client(api_key=os.environ['GEMINI_API_KEY'])
 
           with open('pr-data.json') as f:
               pr_data = json.load(f)
@@ -397,9 +390,30 @@ jobs:
             \"followup_email_draft\": \"Subject: ...\\n\\nEmail body 150-200 words\"
           }}'''
 
-          print('Calling Gemini API...')
-          response = model.generate_content(prompt)
-          raw = response.text.strip()
+          # Try with retry and model fallback
+          models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash']
+          raw = None
+          for model_name in models:
+              for attempt in range(3):
+                  try:
+                      print(f'Calling Gemini API (model={model_name}, attempt={attempt+1})...')
+                      response = client.models.generate_content(
+                          model=model_name,
+                          contents=prompt,
+                          config={'max_output_tokens': 4096, 'temperature': 0.3}
+                      )
+                      raw = response.text.strip()
+                      break
+                  except Exception as e:
+                      print(f'Attempt {attempt+1} with {model_name} failed: {e}')
+                      if attempt < 2:
+                          time.sleep(15)
+              if raw:
+                  break
+
+          if not raw:
+              print('All models failed, using fallback output')
+              raw = '{}'
 
           # Clean up response
           raw = re.sub(r'^[^{]*', '', raw)
@@ -436,15 +450,11 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python3 -c "
-          import json, re, os
-          import google.generativeai as genai
+          import json, re, os, time
+          from google import genai
           from datetime import datetime
 
-          genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-          model = genai.GenerativeModel(
-              model_name='gemini-2.0-flash',
-              generation_config=genai.types.GenerationConfig(max_output_tokens=2000, temperature=0.2)
-          )
+          client = genai.Client(api_key=os.environ['GEMINI_API_KEY'])
 
           with open('feedback-raw.json') as f:
               feedback = json.load(f)
@@ -489,8 +499,27 @@ jobs:
             }}
           }}'''
 
-              response = model.generate_content(prompt)
-              raw = response.text.strip()
+              raw = None
+              models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash']
+              for model_name in models:
+                  for attempt in range(3):
+                      try:
+                          print(f'Calling Gemini API (model={model_name}, attempt={attempt+1})...')
+                          response = client.models.generate_content(
+                              model=model_name,
+                              contents=prompt,
+                              config={'max_output_tokens': 2000, 'temperature': 0.2}
+                          )
+                          raw = response.text.strip()
+                          break
+                      except Exception as e:
+                          print(f'Attempt {attempt+1} with {model_name} failed: {e}')
+                          if attempt < 2:
+                              time.sleep(15)
+                  if raw:
+                      break
+              if not raw:
+                  raw = '{}'
               raw = re.sub(r'^[^{]*', '', raw)
               raw = re.sub(r'[^}]*$', '', raw)
 
