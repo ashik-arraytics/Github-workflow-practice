@@ -34,6 +34,7 @@ function Example({
 			)}
 			{...props}
 		>
+			<nav>nav</nav>
 			{title && (
 				<div className="text-muted-foreground px-1.5 py-2 text-xs font-medium">
 					{title}
