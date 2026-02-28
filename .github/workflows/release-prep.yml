@@ -744,6 +744,12 @@ jobs:
           diff = fb.get('diff_report', {})
           build_summary = build.get('summary', {})
 
+          # Normalize any field that Ollama might return as a dict instead of string
+          def to_str(val):
+              if isinstance(val, dict):
+                  return ' '.join(str(v) for v in val.values() if v)
+              return str(val) if val else ''
+
           # Debug: print what we got
           print(f'Version: {version}')
           print(f'Changelog entries: {len(entries)}')
@@ -831,7 +837,7 @@ jobs:
           blocks.append(divider())
 
           # Executive Summary
-          summary = ai.get('executive_summary', '')
+          summary = to_str(ai.get('executive_summary', ''))
           if summary:
               blocks.append(h('📊 Executive Summary', 1))
               for para in summary.split('\n\n'):
@@ -840,7 +846,7 @@ jobs:
               blocks.append(divider())
 
           # Blog Draft
-          blog = ai.get('marketing_blog_draft', '')
+          blog = to_str(ai.get('marketing_blog_draft', ''))
           if blog:
               blocks.append(h('📝 Blog Post Draft', 1))
               blocks.append(callout('Draft — edit before publishing', '✏️'))
@@ -850,21 +856,27 @@ jobs:
               blocks.append(divider())
 
           # LinkedIn
-          linkedin = ai.get('linkedin_post_draft', '')
+          linkedin = to_str(ai.get('linkedin_post_draft', ''))
           if linkedin:
               blocks.append(h('💼 LinkedIn Post Draft', 1))
               blocks.append(code_block(linkedin))
               blocks.append(divider())
 
           # Reddit
-          reddit = ai.get('reddit_post_draft', '')
+          reddit = to_str(ai.get('reddit_post_draft', ''))
           if reddit:
               blocks.append(h('🟠 Reddit Post Draft', 1))
               blocks.append(code_block(reddit))
               blocks.append(divider())
 
           # Email
-          email = ai.get('followup_email_draft', '')
+          email_raw = ai.get('followup_email_draft', '')
+          if isinstance(email_raw, dict):
+              subj = email_raw.get('Subject', email_raw.get('subject', ''))
+              body = email_raw.get('body', email_raw.get('Body', ''))
+              email = f'Subject: {subj}\n\n{body}' if subj else body
+          else:
+              email = str(email_raw) if email_raw else ''
           if email:
               blocks.append(h('📧 Email Draft', 1))
               for para in email.split('\n\n'):
@@ -896,7 +908,7 @@ jobs:
 
           # Create Notion page
           release_type = '${{ github.event.inputs.release_type }}'
-          summary_text = (ai.get('executive_summary', '') or '')[:2000]
+          summary_text = to_str(ai.get('executive_summary', ''))[:2000]
           if not summary_text:
               highlights = ai.get('release_highlights', [])
               if highlights:
