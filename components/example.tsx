@@ -49,6 +49,9 @@ function Example({
 			>
 				{children}
 			</div>
+			<footer className="text-muted-foreground text-xs">
+				copyright @ 2026
+			</footer>
 		</div>
 	);
 }
