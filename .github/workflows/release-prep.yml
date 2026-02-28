@@ -331,7 +331,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python dependencies
-        run: pip install anthropic requests
+        run: pip install google-generativeai requests
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -341,14 +341,21 @@ jobs:
 
       - name: Run AI generation
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python3 -c "
           import json, re, os
-          import anthropic
+          import google.generativeai as genai
           from datetime import datetime
 
-          client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
+          genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+          model = genai.GenerativeModel(
+              model_name='gemini-2.0-flash',
+              generation_config=genai.types.GenerationConfig(
+                  max_output_tokens=4096,
+                  temperature=0.3
+              )
+          )
 
           with open('pr-data.json') as f:
               pr_data = json.load(f)
@@ -390,14 +397,9 @@ jobs:
             \"followup_email_draft\": \"Subject: ...\\n\\nEmail body 150-200 words\"
           }}'''
 
-          print('Calling Claude API...')
-          response = client.messages.create(
-              model='claude-sonnet-4-20250514',
-              max_tokens=4096,
-              temperature=0.3,
-              messages=[{'role': 'user', 'content': prompt}]
-          )
-          raw = response.content[0].text.strip()
+          print('Calling Gemini API...')
+          response = model.generate_content(prompt)
+          raw = response.text.strip()
 
           # Clean up response
           raw = re.sub(r'^[^{]*', '', raw)
@@ -431,14 +433,18 @@ jobs:
 
       - name: Run feedback intelligence
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python3 -c "
           import json, re, os
-          import anthropic
+          import google.generativeai as genai
           from datetime import datetime
 
-          client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
+          genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+          model = genai.GenerativeModel(
+              model_name='gemini-2.0-flash',
+              generation_config=genai.types.GenerationConfig(max_output_tokens=2000, temperature=0.2)
+          )
 
           with open('feedback-raw.json') as f:
               feedback = json.load(f)
@@ -483,13 +489,8 @@ jobs:
             }}
           }}'''
 
-              response = client.messages.create(
-                  model='claude-sonnet-4-20250514',
-                  max_tokens=2000,
-                  temperature=0.2,
-                  messages=[{'role': 'user', 'content': prompt}]
-              )
-              raw = response.content[0].text.strip()
+              response = model.generate_content(prompt)
+              raw = response.text.strip()
               raw = re.sub(r'^[^{]*', '', raw)
               raw = re.sub(r'[^}]*$', '', raw)
 
