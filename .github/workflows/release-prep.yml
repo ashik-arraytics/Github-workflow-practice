@@ -727,9 +727,6 @@ jobs:
               'icon': {'type': 'emoji', 'emoji': '🚀'},
               'properties': {
                   'Name': {'title': [{'type': 'text', 'text': {'content': f'Release v{version} — Github-workflow-practice'}}]},
-                  'Status': {'select': {'name': 'Draft'}},
-                  'Version': {'rich_text': [{'type': 'text', 'text': {'content': version}}]},
-                  'Date': {'date': {'start': datetime.utcnow().strftime('%Y-%m-%d')}}
               },
               'children': blocks[:100]
           }
