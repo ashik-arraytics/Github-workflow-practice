@@ -56,52 +56,52 @@ jobs:
               id: report
               run: |
                   python3 -c "
-import json, os
-from datetime import datetime
+                  import json, os
+                  from datetime import datetime
 
-# Get build output size
-build_size = 0
-build_files = 0
-if os.path.exists('.next'):
-    for dirpath, dirnames, filenames in os.walk('.next'):
-        for f in filenames:
-            fp = os.path.join(dirpath, f)
-            build_size += os.path.getsize(fp)
-            build_files += 1
+                  # Get build output size
+                  build_size = 0
+                  build_files = 0
+                  if os.path.exists('.next'):
+                      for dirpath, dirnames, filenames in os.walk('.next'):
+                          for f in filenames:
+                              fp = os.path.join(dirpath, f)
+                              build_size += os.path.getsize(fp)
+                              build_files += 1
 
-# Get JS bundle info
-js_bundles = []
-chunks_dir = '.next/static/chunks'
-if os.path.exists(chunks_dir):
-    for f in os.listdir(chunks_dir):
-        if f.endswith('.js'):
-            size = os.path.getsize(os.path.join(chunks_dir, f))
-            js_bundles.append({'file': f, 'size_kb': round(size/1024, 2)})
-js_bundles.sort(key=lambda x: x['size_kb'], reverse=True)
+                  # Get JS bundle info
+                  js_bundles = []
+                  chunks_dir = '.next/static/chunks'
+                  if os.path.exists(chunks_dir):
+                      for f in os.listdir(chunks_dir):
+                          if f.endswith('.js'):
+                              size = os.path.getsize(os.path.join(chunks_dir, f))
+                              js_bundles.append({'file': f, 'size_kb': round(size/1024, 2)})
+                  js_bundles.sort(key=lambda x: x['size_kb'], reverse=True)
 
-report = {
-    'repo': 'Github-workflow-practice',
-    'version': '${{ github.event.inputs.release_version }}',
-    'generated_at': datetime.utcnow().isoformat(),
-    'build_size': {
-        'total_bytes': build_size,
-        'total_kb': round(build_size/1024, 2),
-        'total_mb': round(build_size/(1024*1024), 2),
-        'file_count': build_files
-    },
-    'js_bundles': js_bundles[:10],
-    'summary': {
-        'total_size_mb': round(build_size/(1024*1024), 2),
-        'build_passed': True,
-        'status': 'PASSED'
-    }
-}
-with open('build-report.json', 'w') as f:
-    json.dump(report, f, indent=2)
-print('Build report generated')
-print(f'Build size: {round(build_size/(1024*1024), 2)} MB')
-print(f'Files: {build_files}')
-"
+                  report = {
+                      'repo': 'Github-workflow-practice',
+                      'version': '${{ github.event.inputs.release_version }}',
+                      'generated_at': datetime.utcnow().isoformat(),
+                      'build_size': {
+                          'total_bytes': build_size,
+                          'total_kb': round(build_size/1024, 2),
+                          'total_mb': round(build_size/(1024*1024), 2),
+                          'file_count': build_files
+                      },
+                      'js_bundles': js_bundles[:10],
+                      'summary': {
+                          'total_size_mb': round(build_size/(1024*1024), 2),
+                          'build_passed': True,
+                          'status': 'PASSED'
+                      }
+                  }
+                  with open('build-report.json', 'w') as f:
+                      json.dump(report, f, indent=2)
+                  print('Build report generated')
+                  print(f'Build size: {round(build_size/(1024*1024), 2)} MB')
+                  print(f'Files: {build_files}')
+                  "
                   echo "build_report=$(cat build-report.json | python3 -c 'import sys,json; print(json.dumps(json.load(sys.stdin)))')" >> $GITHUB_OUTPUT
 
             - name: Upload build report
@@ -128,104 +128,104 @@ print(f'Files: {build_files}')
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   python3 -c "
-import subprocess, json
-from datetime import datetime, timedelta, timezone
+                  import subprocess, json
+                  from datetime import datetime, timedelta, timezone
 
-repo = '${{ github.repository }}'
+                  repo = '${{ github.repository }}'
 
-# Try to get last release tag
-last_tag = 'none'
-last_tag_date = None
+                  # Try to get last release tag
+                  last_tag = 'none'
+                  last_tag_date = None
 
-try:
-    result = subprocess.run(
-        ['gh', 'api', f'repos/{repo}/releases/latest'],
-        capture_output=True, text=True, env={**__import__('os').environ}
-    )
-    if result.returncode == 0:
-        data = json.loads(result.stdout)
-        last_tag = data.get('tag_name', 'none')
-        last_tag_date = data.get('published_at', '')
-except:
-    pass
+                  try:
+                      result = subprocess.run(
+                          ['gh', 'api', f'repos/{repo}/releases/latest'],
+                          capture_output=True, text=True, env={**__import__('os').environ}
+                      )
+                      if result.returncode == 0:
+                          data = json.loads(result.stdout)
+                          last_tag = data.get('tag_name', 'none')
+                          last_tag_date = data.get('published_at', '')
+                  except:
+                      pass
 
-# Fallback: last 14 days
-if not last_tag_date:
-    last_tag_date = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
-    last_tag = 'none (using last 14 days)'
+                  # Fallback: last 14 days
+                  if not last_tag_date:
+                      last_tag_date = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+                      last_tag = 'none (using last 14 days)'
 
-print(f'Last tag: {last_tag}')
-print(f'Since: {last_tag_date}')
+                  print(f'Last tag: {last_tag}')
+                  print(f'Since: {last_tag_date}')
 
-# Get merged PRs
-prs_result = subprocess.run(
-    ['gh', 'pr', 'list',
-     '--repo', repo,
-     '--state', 'merged',
-     '--limit', '50',
-     '--json', 'number,title,body,labels,mergedAt,author,url'],
-    capture_output=True, text=True, env={**__import__('os').environ}
-)
+                  # Get merged PRs
+                  prs_result = subprocess.run(
+                      ['gh', 'pr', 'list',
+                       '--repo', repo,
+                       '--state', 'merged',
+                       '--limit', '50',
+                       '--json', 'number,title,body,labels,mergedAt,author,url'],
+                      capture_output=True, text=True, env={**__import__('os').environ}
+                  )
 
-prs = json.loads(prs_result.stdout or '[]')
+                  prs = json.loads(prs_result.stdout or '[]')
 
-# Filter by date
-cutoff = last_tag_date[:19]
-filtered_prs = []
-for pr in prs:
-    merged = pr.get('mergedAt', '')
-    if merged >= cutoff:
-        filtered_prs.append({
-            'number': pr['number'],
-            'title': pr['title'],
-            'body': pr.get('body', '')[:500],
-            'type': 'Fix' if any(w in pr['title'].lower() for w in ['fix','bug','resolve','patch']) else 'New' if any(w in pr['title'].lower() for w in ['add','new','feat','feature']) else 'Tweak',
-            'merged_at': pr.get('mergedAt'),
-            'author': pr.get('author', {}).get('login'),
-            'url': pr.get('url'),
-            'labels': [l.get('name') for l in pr.get('labels', [])]
-        })
+                  # Filter by date
+                  cutoff = last_tag_date[:19]
+                  filtered_prs = []
+                  for pr in prs:
+                      merged = pr.get('mergedAt', '')
+                      if merged >= cutoff:
+                          filtered_prs.append({
+                              'number': pr['number'],
+                              'title': pr['title'],
+                              'body': pr.get('body', '')[:500],
+                              'type': 'Fix' if any(w in pr['title'].lower() for w in ['fix','bug','resolve','patch']) else 'New' if any(w in pr['title'].lower() for w in ['add','new','feat','feature']) else 'Tweak',
+                              'merged_at': pr.get('mergedAt'),
+                              'author': pr.get('author', {}).get('login'),
+                              'url': pr.get('url'),
+                              'labels': [l.get('name') for l in pr.get('labels', [])]
+                          })
 
-# If no PRs, get recent commits
-if not filtered_prs:
-    commits_result = subprocess.run(
-        ['gh', 'api', f'repos/{repo}/commits',
-         '--jq', '.[].commit | {message: .message, date: .committer.date}'],
-        capture_output=True, text=True, env={**__import__('os').environ}
-    )
-    commits = []
-    for line in commits_result.stdout.strip().split('\n'):
-        try:
-            c = json.loads(line)
-            if c.get('date', '') >= cutoff:
-                commits.append(c)
-        except:
-            pass
-else:
-    commits = []
+                  # If no PRs, get recent commits
+                  if not filtered_prs:
+                      commits_result = subprocess.run(
+                          ['gh', 'api', f'repos/{repo}/commits',
+                           '--jq', '.[].commit | {message: .message, date: .committer.date}'],
+                          capture_output=True, text=True, env={**__import__('os').environ}
+                      )
+                      commits = []
+                      for line in commits_result.stdout.strip().split('\n'):
+                          try:
+                              c = json.loads(line)
+                              if c.get('date', '') >= cutoff:
+                                  commits.append(c)
+                          except:
+                              pass
+                  else:
+                      commits = []
 
-output = {
-    'repo': repo,
-    'target_version': '${{ github.event.inputs.release_version }}',
-    'last_tag': last_tag,
-    'last_tag_date': last_tag_date,
-    'collected_at': datetime.utcnow().isoformat(),
-    'pr_count': len(filtered_prs),
-    'prs': filtered_prs,
-    'recent_commits': commits[:20],
-    'summary': {
-        'new_count': sum(1 for p in filtered_prs if p['type'] == 'New'),
-        'fix_count': sum(1 for p in filtered_prs if p['type'] == 'Fix'),
-        'tweak_count': sum(1 for p in filtered_prs if p['type'] == 'Tweak'),
-    }
-}
+                  output = {
+                      'repo': repo,
+                      'target_version': '${{ github.event.inputs.release_version }}',
+                      'last_tag': last_tag,
+                      'last_tag_date': last_tag_date,
+                      'collected_at': datetime.utcnow().isoformat(),
+                      'pr_count': len(filtered_prs),
+                      'prs': filtered_prs,
+                      'recent_commits': commits[:20],
+                      'summary': {
+                          'new_count': sum(1 for p in filtered_prs if p['type'] == 'New'),
+                          'fix_count': sum(1 for p in filtered_prs if p['type'] == 'Fix'),
+                          'tweak_count': sum(1 for p in filtered_prs if p['type'] == 'Tweak'),
+                      }
+                  }
 
-with open('pr-data.json', 'w') as f:
-    json.dump(output, f, indent=2)
+                  with open('pr-data.json', 'w') as f:
+                      json.dump(output, f, indent=2)
 
-print(f'PRs collected: {len(filtered_prs)}')
-print(f'Commits collected: {len(commits)}')
-"
+                  print(f'PRs collected: {len(filtered_prs)}')
+                  print(f'Commits collected: {len(commits)}')
+                  "
                   echo "pr_data=$(cat pr-data.json | python3 -c 'import sys,json; print(json.dumps(json.load(sys.stdin)))')" >> $GITHUB_OUTPUT
                   echo "last_tag=$(cat pr-data.json | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"last_tag\"])')" >> $GITHUB_OUTPUT
 
@@ -247,69 +247,69 @@ print(f'Commits collected: {len(commits)}')
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   python3 -c "
-import subprocess, json
-from datetime import datetime, timedelta, timezone
+                  import subprocess, json
+                  from datetime import datetime, timedelta, timezone
 
-repo = '${{ github.repository }}'
+                  repo = '${{ github.repository }}'
 
-# Get cutoff date (last 14 days fallback)
-cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+                  # Get cutoff date (last 14 days fallback)
+                  cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
 
-try:
-    result = subprocess.run(
-        ['gh', 'api', f'repos/{repo}/releases/latest'],
-        capture_output=True, text=True, env={**__import__('os').environ}
-    )
-    if result.returncode == 0:
-        data = json.loads(result.stdout)
-        if data.get('published_at'):
-            cutoff = data['published_at']
-except:
-    pass
+                  try:
+                      result = subprocess.run(
+                          ['gh', 'api', f'repos/{repo}/releases/latest'],
+                          capture_output=True, text=True, env={**__import__('os').environ}
+                      )
+                      if result.returncode == 0:
+                          data = json.loads(result.stdout)
+                          if data.get('published_at'):
+                              cutoff = data['published_at']
+                  except:
+                      pass
 
-print(f'Collecting feedback since: {cutoff[:10]}')
+                  print(f'Collecting feedback since: {cutoff[:10]}')
 
-# Get closed and open issues since cutoff
-issues_result = subprocess.run(
-    ['gh', 'issue', 'list',
-     '--repo', repo,
-     '--state', 'all',
-     '--limit', '50',
-     '--json', 'number,title,body,state,labels,createdAt,author,url,comments'],
-    capture_output=True, text=True, env={**__import__('os').environ}
-)
+                  # Get closed and open issues since cutoff
+                  issues_result = subprocess.run(
+                      ['gh', 'issue', 'list',
+                       '--repo', repo,
+                       '--state', 'all',
+                       '--limit', '50',
+                       '--json', 'number,title,body,state,labels,createdAt,author,url,comments'],
+                      capture_output=True, text=True, env={**__import__('os').environ}
+                  )
 
-issues = json.loads(issues_result.stdout or '[]')
-filtered = [i for i in issues if i.get('createdAt', '') >= cutoff[:10]]
+                  issues = json.loads(issues_result.stdout or '[]')
+                  filtered = [i for i in issues if i.get('createdAt', '') >= cutoff[:10]]
 
-feedback_items = []
-for issue in filtered:
-    feedback_items.append({
-        'source': 'github_issue',
-        'title': issue.get('title', ''),
-        'content': (issue.get('body') or '')[:500],
-        'state': issue.get('state'),
-        'url': issue.get('url'),
-        'date': issue.get('createdAt'),
-        'labels': [l.get('name') for l in issue.get('labels', [])],
-        'comment_count': issue.get('comments', 0),
-        'raw_type': 'issue'
-    })
+                  feedback_items = []
+                  for issue in filtered:
+                      feedback_items.append({
+                          'source': 'github_issue',
+                          'title': issue.get('title', ''),
+                          'content': (issue.get('body') or '')[:500],
+                          'state': issue.get('state'),
+                          'url': issue.get('url'),
+                          'date': issue.get('createdAt'),
+                          'labels': [l.get('name') for l in issue.get('labels', [])],
+                          'comment_count': issue.get('comments', 0),
+                          'raw_type': 'issue'
+                      })
 
-output = {
-    'source': 'github_issues',
-    'repo': repo,
-    'crawled_at': datetime.utcnow().isoformat(),
-    'cutoff_date': cutoff[:10],
-    'total_items': len(feedback_items),
-    'items': feedback_items
-}
+                  output = {
+                      'source': 'github_issues',
+                      'repo': repo,
+                      'crawled_at': datetime.utcnow().isoformat(),
+                      'cutoff_date': cutoff[:10],
+                      'total_items': len(feedback_items),
+                      'items': feedback_items
+                  }
 
-with open('feedback-raw.json', 'w') as f:
-    json.dump(output, f, indent=2)
+                  with open('feedback-raw.json', 'w') as f:
+                      json.dump(output, f, indent=2)
 
-print(f'Feedback items collected: {len(feedback_items)}')
-"
+                  print(f'Feedback items collected: {len(feedback_items)}')
+                  "
 
             - name: Upload feedback
               uses: actions/upload-artifact@v4
@@ -345,172 +345,172 @@ print(f'Feedback items collected: {len(feedback_items)}')
                   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
               run: |
                   python3 -c "
-import json, re, os
-import google.generativeai as genai
-from datetime import datetime
+                  import json, re, os
+                  import google.generativeai as genai
+                  from datetime import datetime
 
-genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-model = genai.GenerativeModel(
-    model_name='gemini-2.0-flash',
-    generation_config=genai.types.GenerationConfig(
-        max_output_tokens=4096,
-        temperature=0.3
-    )
-)
+                  genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+                  model = genai.GenerativeModel(
+                      model_name='gemini-2.0-flash',
+                      generation_config=genai.types.GenerationConfig(
+                          max_output_tokens=4096,
+                          temperature=0.3
+                      )
+                  )
 
-with open('pr-data.json') as f:
-    pr_data = json.load(f)
-with open('build-report.json') as f:
-    build_report = json.load(f)
+                  with open('pr-data.json') as f:
+                      pr_data = json.load(f)
+                  with open('build-report.json') as f:
+                      build_report = json.load(f)
 
-prs = pr_data.get('prs', [])
-commits = pr_data.get('recent_commits', [])
-build = build_report.get('summary', {})
+                  prs = pr_data.get('prs', [])
+                  commits = pr_data.get('recent_commits', [])
+                  build = build_report.get('summary', {})
 
-prompt = f'''You are the release manager for a Next.js web application called Github-workflow-practice.
+                  prompt = f'''You are the release manager for a Next.js web application called Github-workflow-practice.
 
-## Release Context
-Version: ${{ github.event.inputs.release_version }}
-Release Type: ${{ github.event.inputs.release_type }}
-Date: {datetime.utcnow().strftime('%B %d, %Y')}
-PRs merged: {len(prs)}
-Recent commits: {len(commits)}
-Build size: {build.get('total_size_mb', 0)} MB
-Build status: {build.get('status', 'PASSED')}
+                  ## Release Context
+                  Version: ${{ github.event.inputs.release_version }}
+                  Release Type: ${{ github.event.inputs.release_type }}
+                  Date: {datetime.utcnow().strftime('%B %d, %Y')}
+                  PRs merged: {len(prs)}
+                  Recent commits: {len(commits)}
+                  Build size: {build.get('total_size_mb', 0)} MB
+                  Build status: {build.get('status', 'PASSED')}
 
-## Merged PRs
-{json.dumps([{\"title\": p[\"title\"], \"type\": p[\"type\"], \"body\": p[\"body\"]} for p in prs], indent=2)}
+                  ## Merged PRs
+                  {json.dumps([{\"title\": p[\"title\"], \"type\": p[\"type\"], \"body\": p[\"body\"]} for p in prs], indent=2)}
 
-## Recent Commits (if no PRs)
-{json.dumps([c.get(\"message\", \"\")[:100] for c in commits[:10]], indent=2)}
+                  ## Recent Commits (if no PRs)
+                  {json.dumps([c.get(\"message\", \"\")[:100] for c in commits[:10]], indent=2)}
 
-Generate a complete release report. Return ONLY valid JSON, no markdown fences:
-{{
-  \"version\": \"${{ github.event.inputs.release_version }}\",
-  \"changelog_entries\": [
-    {{\"type\": \"New or Fix or Tweak\", \"entry\": \"clear one-line description\"}}
-  ],
-  \"executive_summary\": \"2-3 paragraph internal summary of what changed and why it matters\",
-  \"release_highlights\": [\"highlight 1\", \"highlight 2\", \"highlight 3\"],
-  \"marketing_blog_draft\": \"400-500 word blog post about this release. Professional tone.\",
-  \"linkedin_post_draft\": \"150-200 word LinkedIn post with relevant hashtags\",
-  \"reddit_post_draft\": \"200-250 word honest Reddit post for r/nextjs or r/webdev\",
-  \"followup_email_draft\": \"Subject: ...\\n\\nEmail body 150-200 words\"
-}}'''
+                  Generate a complete release report. Return ONLY valid JSON, no markdown fences:
+                  {{
+                    \"version\": \"${{ github.event.inputs.release_version }}\",
+                    \"changelog_entries\": [
+                      {{\"type\": \"New or Fix or Tweak\", \"entry\": \"clear one-line description\"}}
+                    ],
+                    \"executive_summary\": \"2-3 paragraph internal summary of what changed and why it matters\",
+                    \"release_highlights\": [\"highlight 1\", \"highlight 2\", \"highlight 3\"],
+                    \"marketing_blog_draft\": \"400-500 word blog post about this release. Professional tone.\",
+                    \"linkedin_post_draft\": \"150-200 word LinkedIn post with relevant hashtags\",
+                    \"reddit_post_draft\": \"200-250 word honest Reddit post for r/nextjs or r/webdev\",
+                    \"followup_email_draft\": \"Subject: ...\\n\\nEmail body 150-200 words\"
+                  }}'''
 
-print('Calling Gemini API...')
-response = model.generate_content(prompt)
-raw = response.text.strip()
+                  print('Calling Gemini API...')
+                  response = model.generate_content(prompt)
+                  raw = response.text.strip()
 
-# Clean up response
-raw = re.sub(r'^[^{]*', '', raw)
-raw = re.sub(r'[^}]*$', '', raw)
+                  # Clean up response
+                  raw = re.sub(r'^[^{]*', '', raw)
+                  raw = re.sub(r'[^}]*$', '', raw)
 
-try:
-    output = json.loads(raw)
-except:
-    output = {
-        'version': '${{ github.event.inputs.release_version }}',
-        'changelog_entries': [{'type': 'Tweak', 'entry': 'General improvements and updates'}],
-        'executive_summary': raw[:500],
-        'marketing_blog_draft': '',
-        'linkedin_post_draft': '',
-        'reddit_post_draft': '',
-        'followup_email_draft': '',
-        'parse_error': True
-    }
-    print('Warning: JSON parse failed, using fallback')
+                  try:
+                      output = json.loads(raw)
+                  except:
+                      output = {
+                          'version': '${{ github.event.inputs.release_version }}',
+                          'changelog_entries': [{'type': 'Tweak', 'entry': 'General improvements and updates'}],
+                          'executive_summary': raw[:500],
+                          'marketing_blog_draft': '',
+                          'linkedin_post_draft': '',
+                          'reddit_post_draft': '',
+                          'followup_email_draft': '',
+                          'parse_error': True
+                      }
+                      print('Warning: JSON parse failed, using fallback')
 
-output['version'] = '${{ github.event.inputs.release_version }}'
-output['generated_at'] = datetime.utcnow().isoformat()
-output['pr_count'] = len(prs)
+                  output['version'] = '${{ github.event.inputs.release_version }}'
+                  output['generated_at'] = datetime.utcnow().isoformat()
+                  output['pr_count'] = len(prs)
 
-with open('ai-release-output.json', 'w') as f:
-    json.dump(output, f, indent=2, ensure_ascii=False)
+                  with open('ai-release-output.json', 'w') as f:
+                      json.dump(output, f, indent=2, ensure_ascii=False)
 
-print('AI generation complete')
-print(f'Changelog entries: {len(output.get(\"changelog_entries\", []))}')
-"
+                  print('AI generation complete')
+                  print(f'Changelog entries: {len(output.get(\"changelog_entries\", []))}')
+                  "
 
             - name: Run feedback intelligence
               env:
                   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
               run: |
                   python3 -c "
-import json, re, os
-import google.generativeai as genai
-from datetime import datetime
+                  import json, re, os
+                  import google.generativeai as genai
+                  from datetime import datetime
 
-genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-model = genai.GenerativeModel(
-    model_name='gemini-2.0-flash',
-    generation_config=genai.types.GenerationConfig(max_output_tokens=2000, temperature=0.2)
-)
+                  genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+                  model = genai.GenerativeModel(
+                      model_name='gemini-2.0-flash',
+                      generation_config=genai.types.GenerationConfig(max_output_tokens=2000, temperature=0.2)
+                  )
 
-with open('feedback-raw.json') as f:
-    feedback = json.load(f)
-with open('ai-release-output.json') as f:
-    release = json.load(f)
+                  with open('feedback-raw.json') as f:
+                      feedback = json.load(f)
+                  with open('ai-release-output.json') as f:
+                      release = json.load(f)
 
-items = feedback.get('items', [])
-changelog = release.get('changelog_entries', [])
+                  items = feedback.get('items', [])
+                  changelog = release.get('changelog_entries', [])
 
-if not items:
-    output = {
-        'generated_at': datetime.utcnow().isoformat(),
-        'feedback_stats': {'total': 0},
-        'diff_report': {
-            'addressed': [],
-            'pending': [],
-            'sentiment_summary': {'overall': 'no feedback found'},
-            'stats': {'total_feedback_analyzed': 0}
-        }
-    }
-else:
-    prompt = f'''Analyze GitHub issues as user feedback for a Next.js project.
+                  if not items:
+                      output = {
+                          'generated_at': datetime.utcnow().isoformat(),
+                          'feedback_stats': {'total': 0},
+                          'diff_report': {
+                              'addressed': [],
+                              'pending': [],
+                              'sentiment_summary': {'overall': 'no feedback found'},
+                              'stats': {'total_feedback_analyzed': 0}
+                          }
+                      }
+                  else:
+                      prompt = f'''Analyze GitHub issues as user feedback for a Next.js project.
 
-Changelog for this release:
-{json.dumps(changelog, indent=2)}
+                  Changelog for this release:
+                  {json.dumps(changelog, indent=2)}
 
-GitHub Issues/Feedback:
-{json.dumps([{\"title\": i[\"title\"], \"content\": i[\"content\"], \"state\": i[\"state\"]} for i in items[:30]], indent=2)}
+                  GitHub Issues/Feedback:
+                  {json.dumps([{\"title\": i[\"title\"], \"content\": i[\"content\"], \"state\": i[\"state\"]} for i in items[:30]], indent=2)}
 
-Return ONLY valid JSON:
-{{
-  \"addressed\": [{{\"feedback_summary\": \"...\", \"addressed_by\": \"changelog entry\", \"confidence\": \"HIGH or MEDIUM\"}}],
-  \"pending\": [{{\"feedback_summary\": \"...\", \"severity\": \"HIGH/MEDIUM/LOW\", \"recommended_priority\": \"next release or backlog\"}}],
-  \"sentiment_summary\": {{
-    \"overall\": \"positive/mixed/negative\",
-    \"top_topics\": [\"topic1\", \"topic2\"]
-  }},
-  \"stats\": {{
-    \"total_feedback_analyzed\": {len(items)},
-    \"issues_addressed\": 0,
-    \"issues_pending\": 0
-  }}
-}}'''
+                  Return ONLY valid JSON:
+                  {{
+                    \"addressed\": [{{\"feedback_summary\": \"...\", \"addressed_by\": \"changelog entry\", \"confidence\": \"HIGH or MEDIUM\"}}],
+                    \"pending\": [{{\"feedback_summary\": \"...\", \"severity\": \"HIGH/MEDIUM/LOW\", \"recommended_priority\": \"next release or backlog\"}}],
+                    \"sentiment_summary\": {{
+                      \"overall\": \"positive/mixed/negative\",
+                      \"top_topics\": [\"topic1\", \"topic2\"]
+                    }},
+                    \"stats\": {{
+                      \"total_feedback_analyzed\": {len(items)},
+                      \"issues_addressed\": 0,
+                      \"issues_pending\": 0
+                    }}
+                  }}'''
 
-    response = model.generate_content(prompt)
-    raw = response.text.strip()
-    raw = re.sub(r'^[^{]*', '', raw)
-    raw = re.sub(r'[^}]*$', '', raw)
+                      response = model.generate_content(prompt)
+                      raw = response.text.strip()
+                      raw = re.sub(r'^[^{]*', '', raw)
+                      raw = re.sub(r'[^}]*$', '', raw)
 
-    try:
-        diff = json.loads(raw)
-    except:
-        diff = {'addressed': [], 'pending': [], 'sentiment_summary': {}, 'stats': {}}
+                      try:
+                          diff = json.loads(raw)
+                      except:
+                          diff = {'addressed': [], 'pending': [], 'sentiment_summary': {}, 'stats': {}}
 
-    output = {
-        'generated_at': datetime.utcnow().isoformat(),
-        'feedback_stats': {'total': len(items)},
-        'diff_report': diff
-    }
+                      output = {
+                          'generated_at': datetime.utcnow().isoformat(),
+                          'feedback_stats': {'total': len(items)},
+                          'diff_report': diff
+                      }
 
-with open('feedback-intelligence.json', 'w') as f:
-    json.dump(output, f, indent=2)
+                  with open('feedback-intelligence.json', 'w') as f:
+                      json.dump(output, f, indent=2)
 
-print(f'Feedback intelligence complete. Items analyzed: {len(items)}')
-"
+                  print(f'Feedback intelligence complete. Items analyzed: {len(items)}')
+                  "
 
             - name: Upload AI outputs
               uses: actions/upload-artifact@v4
@@ -550,181 +550,181 @@ print(f'Feedback intelligence complete. Items analyzed: {len(items)}')
                   NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
               run: |
                   python3 -c "
-import json, os, requests
-from datetime import datetime
+                  import json, os, requests
+                  from datetime import datetime
 
-api_key = os.environ['NOTION_API_KEY']
-db_id = os.environ['NOTION_DATABASE_ID']
+                  api_key = os.environ['NOTION_API_KEY']
+                  db_id = os.environ['NOTION_DATABASE_ID']
 
-headers = {
-    'Authorization': f'Bearer {api_key}',
-    'Content-Type': 'application/json',
-    'Notion-Version': '2022-06-28'
-}
+                  headers = {
+                      'Authorization': f'Bearer {api_key}',
+                      'Content-Type': 'application/json',
+                      'Notion-Version': '2022-06-28'
+                  }
 
-with open('ai-release-output.json') as f:
-    ai = json.load(f)
-with open('feedback-intelligence.json') as f:
-    fb = json.load(f)
-with open('build-report.json') as f:
-    build = json.load(f)
+                  with open('ai-release-output.json') as f:
+                      ai = json.load(f)
+                  with open('feedback-intelligence.json') as f:
+                      fb = json.load(f)
+                  with open('build-report.json') as f:
+                      build = json.load(f)
 
-version = ai.get('version', '?.?.?')
-entries = ai.get('changelog_entries', [])
-diff = fb.get('diff_report', {})
-build_summary = build.get('summary', {})
+                  version = ai.get('version', '?.?.?')
+                  entries = ai.get('changelog_entries', [])
+                  diff = fb.get('diff_report', {})
+                  build_summary = build.get('summary', {})
 
-def text(content, bold=False):
-    return {
-        'object': 'block', 'type': 'paragraph',
-        'paragraph': {'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}, 'annotations': {'bold': bold}}]}
-    }
+                  def text(content, bold=False):
+                      return {
+                          'object': 'block', 'type': 'paragraph',
+                          'paragraph': {'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}, 'annotations': {'bold': bold}}]}
+                      }
 
-def h(content, level=2):
-    t = f'heading_{level}'
-    return {'object': 'block', 'type': t, t: {'rich_text': [{'type': 'text', 'text': {'content': content}}]}}
+                  def h(content, level=2):
+                      t = f'heading_{level}'
+                      return {'object': 'block', 'type': t, t: {'rich_text': [{'type': 'text', 'text': {'content': content}}]}}
 
-def bullet(content):
-    return {
-        'object': 'block', 'type': 'bulleted_list_item',
-        'bulleted_list_item': {'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}}]}
-    }
+                  def bullet(content):
+                      return {
+                          'object': 'block', 'type': 'bulleted_list_item',
+                          'bulleted_list_item': {'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}}]}
+                      }
 
-def divider():
-    return {'object': 'block', 'type': 'divider', 'divider': {}}
+                  def divider():
+                      return {'object': 'block', 'type': 'divider', 'divider': {}}
 
-def callout(content, emoji='📌'):
-    return {
-        'object': 'block', 'type': 'callout',
-        'callout': {
-            'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}}],
-            'icon': {'type': 'emoji', 'emoji': emoji}
-        }
-    }
+                  def callout(content, emoji='📌'):
+                      return {
+                          'object': 'block', 'type': 'callout',
+                          'callout': {
+                              'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}}],
+                              'icon': {'type': 'emoji', 'emoji': emoji}
+                          }
+                      }
 
-def code_block(content):
-    return {
-        'object': 'block', 'type': 'code',
-        'code': {
-            'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}}],
-            'language': 'plain text'
-        }
-    }
+                  def code_block(content):
+                      return {
+                          'object': 'block', 'type': 'code',
+                          'code': {
+                              'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}}],
+                              'language': 'plain text'
+                          }
+                      }
 
-blocks = []
+                  blocks = []
 
-# Header
-blocks.append(callout(
-    f'Release v{version} | {datetime.utcnow().strftime(\"%B %d, %Y\")} | Build: {build_summary.get(\"status\", \"PASSED\")} | {build_summary.get(\"total_size_mb\", 0)} MB',
-    '🚀'
-))
-blocks.append(divider())
+                  # Header
+                  blocks.append(callout(
+                      f'Release v{version} | {datetime.utcnow().strftime(\"%B %d, %Y\")} | Build: {build_summary.get(\"status\", \"PASSED\")} | {build_summary.get(\"total_size_mb\", 0)} MB',
+                      '🚀'
+                  ))
+                  blocks.append(divider())
 
-# Changelog
-blocks.append(h('📋 Changelog', 1))
-for t, icon in [('New', '✨'), ('Fix', '🔧'), ('Tweak', '⚡')]:
-    typed = [e for e in entries if e.get('type') == t]
-    if typed:
-        blocks.append(text(f'{icon} {t}', bold=True))
-        for e in typed:
-            blocks.append(bullet(e.get('entry', '')))
-blocks.append(divider())
+                  # Changelog
+                  blocks.append(h('📋 Changelog', 1))
+                  for t, icon in [('New', '✨'), ('Fix', '🔧'), ('Tweak', '⚡')]:
+                      typed = [e for e in entries if e.get('type') == t]
+                      if typed:
+                          blocks.append(text(f'{icon} {t}', bold=True))
+                          for e in typed:
+                              blocks.append(bullet(e.get('entry', '')))
+                  blocks.append(divider())
 
-# Executive Summary
-summary = ai.get('executive_summary', '')
-if summary:
-    blocks.append(h('📊 Executive Summary', 1))
-    for para in summary.split('\n\n'):
-        if para.strip():
-            blocks.append(text(para.strip()))
-    blocks.append(divider())
+                  # Executive Summary
+                  summary = ai.get('executive_summary', '')
+                  if summary:
+                      blocks.append(h('📊 Executive Summary', 1))
+                      for para in summary.split('\n\n'):
+                          if para.strip():
+                              blocks.append(text(para.strip()))
+                      blocks.append(divider())
 
-# Blog Draft
-blog = ai.get('marketing_blog_draft', '')
-if blog:
-    blocks.append(h('📝 Blog Post Draft', 1))
-    blocks.append(callout('Draft — edit before publishing', '✏️'))
-    for para in blog.split('\n\n'):
-        if para.strip():
-            blocks.append(text(para.strip()))
-    blocks.append(divider())
+                  # Blog Draft
+                  blog = ai.get('marketing_blog_draft', '')
+                  if blog:
+                      blocks.append(h('📝 Blog Post Draft', 1))
+                      blocks.append(callout('Draft — edit before publishing', '✏️'))
+                      for para in blog.split('\n\n'):
+                          if para.strip():
+                              blocks.append(text(para.strip()))
+                      blocks.append(divider())
 
-# LinkedIn
-linkedin = ai.get('linkedin_post_draft', '')
-if linkedin:
-    blocks.append(h('💼 LinkedIn Post Draft', 1))
-    blocks.append(code_block(linkedin))
-    blocks.append(divider())
+                  # LinkedIn
+                  linkedin = ai.get('linkedin_post_draft', '')
+                  if linkedin:
+                      blocks.append(h('💼 LinkedIn Post Draft', 1))
+                      blocks.append(code_block(linkedin))
+                      blocks.append(divider())
 
-# Reddit
-reddit = ai.get('reddit_post_draft', '')
-if reddit:
-    blocks.append(h('🟠 Reddit Post Draft', 1))
-    blocks.append(code_block(reddit))
-    blocks.append(divider())
+                  # Reddit
+                  reddit = ai.get('reddit_post_draft', '')
+                  if reddit:
+                      blocks.append(h('🟠 Reddit Post Draft', 1))
+                      blocks.append(code_block(reddit))
+                      blocks.append(divider())
 
-# Email
-email = ai.get('followup_email_draft', '')
-if email:
-    blocks.append(h('📧 Email Draft', 1))
-    for para in email.split('\n\n'):
-        if para.strip():
-            blocks.append(text(para.strip()))
-    blocks.append(divider())
+                  # Email
+                  email = ai.get('followup_email_draft', '')
+                  if email:
+                      blocks.append(h('📧 Email Draft', 1))
+                      for para in email.split('\n\n'):
+                          if para.strip():
+                              blocks.append(text(para.strip()))
+                      blocks.append(divider())
 
-# Feedback
-addressed = diff.get('addressed', [])
-pending = diff.get('pending', [])
-sentiment = diff.get('sentiment_summary', {})
+                  # Feedback
+                  addressed = diff.get('addressed', [])
+                  pending = diff.get('pending', [])
+                  sentiment = diff.get('sentiment_summary', {})
 
-blocks.append(h('👥 Feedback Intelligence', 1))
-blocks.append(text(f'Overall sentiment: {sentiment.get(\"overall\", \"N/A\")}'))
+                  blocks.append(h('👥 Feedback Intelligence', 1))
+                  blocks.append(text(f'Overall sentiment: {sentiment.get(\"overall\", \"N/A\")}'))
 
-if addressed:
-    blocks.append(h('✅ Issues Addressed', 2))
-    for item in addressed:
-        blocks.append(bullet(f'{item.get(\"feedback_summary\",\"\")} → {item.get(\"addressed_by\",\"\")}'))
+                  if addressed:
+                      blocks.append(h('✅ Issues Addressed', 2))
+                      for item in addressed:
+                          blocks.append(bullet(f'{item.get(\"feedback_summary\",\"\")} → {item.get(\"addressed_by\",\"\")}'))
 
-if pending:
-    blocks.append(h('⏳ Pending Issues', 2))
-    for item in pending:
-        sev = {'HIGH':'🔴','MEDIUM':'🟡','LOW':'🟢'}.get(item.get('severity',''), '⚪')
-        blocks.append(bullet(f'{sev} {item.get(\"feedback_summary\",\"\")} — {item.get(\"recommended_priority\",\"\")}'))
+                  if pending:
+                      blocks.append(h('⏳ Pending Issues', 2))
+                      for item in pending:
+                          sev = {'HIGH':'🔴','MEDIUM':'🟡','LOW':'🟢'}.get(item.get('severity',''), '⚪')
+                          blocks.append(bullet(f'{sev} {item.get(\"feedback_summary\",\"\")} — {item.get(\"recommended_priority\",\"\")}'))
 
-blocks.append(divider())
-blocks.append(text(f'Generated by Release Intelligence System on {datetime.utcnow().strftime(\"%Y-%m-%d %H:%M\")} UTC'))
+                  blocks.append(divider())
+                  blocks.append(text(f'Generated by Release Intelligence System on {datetime.utcnow().strftime(\"%Y-%m-%d %H:%M\")} UTC'))
 
-# Create Notion page
-payload = {
-    'parent': {'database_id': db_id},
-    'icon': {'type': 'emoji', 'emoji': '🚀'},
-    'properties': {
-        'Name': {'title': [{'type': 'text', 'text': {'content': f'Release v{version} — Github-workflow-practice'}}]},
-        'Status': {'select': {'name': 'Draft'}},
-        'Version': {'rich_text': [{'type': 'text', 'text': {'content': version}}]},
-        'Date': {'date': {'start': datetime.utcnow().strftime('%Y-%m-%d')}}
-    },
-    'children': blocks[:100]
-}
+                  # Create Notion page
+                  payload = {
+                      'parent': {'database_id': db_id},
+                      'icon': {'type': 'emoji', 'emoji': '🚀'},
+                      'properties': {
+                          'Name': {'title': [{'type': 'text', 'text': {'content': f'Release v{version} — Github-workflow-practice'}}]},
+                          'Status': {'select': {'name': 'Draft'}},
+                          'Version': {'rich_text': [{'type': 'text', 'text': {'content': version}}]},
+                          'Date': {'date': {'start': datetime.utcnow().strftime('%Y-%m-%d')}}
+                      },
+                      'children': blocks[:100]
+                  }
 
-resp = requests.post(f'https://api.notion.com/v1/pages', headers=headers, json=payload)
+                  resp = requests.post(f'https://api.notion.com/v1/pages', headers=headers, json=payload)
 
-if resp.status_code in (200, 201):
-    page_url = resp.json().get('url', '')
-    print(f'Notion page created: {page_url}')
-else:
-    print(f'Notion error {resp.status_code}: {resp.text[:300]}')
-    exit(1)
+                  if resp.status_code in (200, 201):
+                      page_url = resp.json().get('url', '')
+                      print(f'Notion page created: {page_url}')
+                  else:
+                      print(f'Notion error {resp.status_code}: {resp.text[:300]}')
+                      exit(1)
 
-# Append remaining blocks if any
-if len(blocks) > 100:
-    page_id = resp.json()['id']
-    for chunk_start in range(100, len(blocks), 100):
-        chunk = blocks[chunk_start:chunk_start+100]
-        requests.patch(
-            f'https://api.notion.com/v1/blocks/{page_id}/children',
-            headers=headers,
-            json={'children': chunk}
-        )
-print('Done!')
-"
+                  # Append remaining blocks if any
+                  if len(blocks) > 100:
+                      page_id = resp.json()['id']
+                      for chunk_start in range(100, len(blocks), 100):
+                          chunk = blocks[chunk_start:chunk_start+100]
+                          requests.patch(
+                              f'https://api.notion.com/v1/blocks/{page_id}/children',
+                              headers=headers,
+                              json={'children': chunk}
+                          )
+                  print('Done!')
+                  "
