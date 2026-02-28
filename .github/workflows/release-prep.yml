@@ -128,10 +128,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 -c "
-          import subprocess, json
+          import subprocess, json, os
           from datetime import datetime, timedelta, timezone
 
           repo = '${{ github.repository }}'
+          print(f'Repository: {repo}')
+
+          # Check gh CLI version
+          gh_ver = subprocess.run(['gh', '--version'], capture_output=True, text=True)
+          print(f'gh CLI: {gh_ver.stdout.strip().split(chr(10))[0]}')
 
           # Try to get last release tag
           last_tag = 'none'
@@ -140,67 +145,145 @@ jobs:
           try:
               result = subprocess.run(
                   ['gh', 'api', f'repos/{repo}/releases/latest'],
-                  capture_output=True, text=True, env={**__import__('os').environ}
+                  capture_output=True, text=True, env={**os.environ}
               )
               if result.returncode == 0:
                   data = json.loads(result.stdout)
                   last_tag = data.get('tag_name', 'none')
                   last_tag_date = data.get('published_at', '')
-          except:
-              pass
+                  print(f'Found latest release: {last_tag} at {last_tag_date}')
+              else:
+                  print(f'No releases found (API returned {result.returncode})')
+                  print(f'stderr: {result.stderr[:200]}')
+          except Exception as e:
+              print(f'Error getting releases: {e}')
 
-          # Fallback: last 14 days
+          # Fallback: last 30 days (increased from 14)
           if not last_tag_date:
-              last_tag_date = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
-              last_tag = 'none (using last 14 days)'
+              last_tag_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%SZ')
+              last_tag = 'none (using last 30 days)'
 
           print(f'Last tag: {last_tag}')
           print(f'Since: {last_tag_date}')
 
-          # Get merged PRs
+          # Normalize cutoff to comparable format
+          cutoff = last_tag_date[:19]  # '2026-01-29T12:00:00'
+          print(f'Cutoff for filtering: {cutoff}')
+
+          # Method 1: Try gh pr list --state merged
+          prs = []
+          print('--- Trying: gh pr list --state merged ---')
           prs_result = subprocess.run(
               ['gh', 'pr', 'list',
                '--repo', repo,
                '--state', 'merged',
                '--limit', '50',
                '--json', 'number,title,body,labels,mergedAt,author,url'],
-              capture_output=True, text=True, env={**__import__('os').environ}
+              capture_output=True, text=True, env={**os.environ}
           )
+          print(f'gh pr list exit code: {prs_result.returncode}')
+          if prs_result.returncode != 0:
+              print(f'gh pr list stderr: {prs_result.stderr[:300]}')
+          if prs_result.stdout:
+              prs = json.loads(prs_result.stdout)
+              print(f'gh pr list returned {len(prs)} merged PRs')
+          else:
+              print('gh pr list returned empty output')
 
-          prs = json.loads(prs_result.stdout or '[]')
+          # Method 2: Fallback - use gh search if --state merged returned nothing
+          if not prs:
+              print('--- Fallback: gh pr list --state closed ---')
+              closed_result = subprocess.run(
+                  ['gh', 'pr', 'list',
+                   '--repo', repo,
+                   '--state', 'closed',
+                   '--limit', '50',
+                   '--json', 'number,title,body,labels,mergedAt,closedAt,author,url'],
+                  capture_output=True, text=True, env={**os.environ}
+              )
+              print(f'gh pr list (closed) exit code: {closed_result.returncode}')
+              if closed_result.stdout:
+                  closed_prs = json.loads(closed_result.stdout)
+                  print(f'Closed PRs found: {len(closed_prs)}')
+                  # Filter only those that have mergedAt (merged, not just closed)
+                  prs = [p for p in closed_prs if p.get('mergedAt')]
+                  print(f'Of those, {len(prs)} were actually merged')
+              if closed_result.returncode != 0:
+                  print(f'stderr: {closed_result.stderr[:300]}')
+
+          # Method 3: Last resort - use GitHub API search
+          if not prs:
+              print('--- Last resort: gh API search ---')
+              search_result = subprocess.run(
+                  ['gh', 'api', f'repos/{repo}/pulls',
+                   '-q', '.[] | {number, title, body: (.body // \"\" | .[0:500]), mergedAt: .merged_at, url: .html_url, author: {login: .user.login}}',
+                   '-X', 'GET',
+                   '-f', 'state=closed',
+                   '-f', 'sort=updated',
+                   '-f', 'direction=desc',
+                   '-f', 'per_page=50'],
+                  capture_output=True, text=True, env={**os.environ}
+              )
+              if search_result.stdout.strip():
+                  api_prs = []
+                  for line in search_result.stdout.strip().split(chr(10)):
+                      try:
+                          pr = json.loads(line)
+                          if pr.get('mergedAt'):
+                              api_prs.append(pr)
+                      except:
+                          pass
+                  prs = api_prs
+                  print(f'API search found {len(prs)} merged PRs')
+
+          # Debug: print first 5 PRs found
+          for pr in prs[:5]:
+              print(f'  PR #{pr.get(\"number\")}: {pr.get(\"title\")} (merged: {pr.get(\"mergedAt\", \"N/A\")})')
 
           # Filter by date
-          cutoff = last_tag_date[:19]
           filtered_prs = []
           for pr in prs:
-              merged = pr.get('mergedAt', '')
-              if merged >= cutoff:
+              merged = (pr.get('mergedAt') or '')[:19]  # normalize to same format
+              if merged and merged >= cutoff:
+                  title = pr.get('title', '').lower()
+                  if any(w in title for w in ['fix','bug','resolve','patch','hotfix']):
+                      pr_type = 'Fix'
+                  elif any(w in title for w in ['add','new','feat','feature','implement','create']):
+                      pr_type = 'New'
+                  else:
+                      pr_type = 'Tweak'
                   filtered_prs.append({
                       'number': pr['number'],
                       'title': pr['title'],
-                      'body': pr.get('body', '')[:500],
-                      'type': 'Fix' if any(w in pr['title'].lower() for w in ['fix','bug','resolve','patch']) else 'New' if any(w in pr['title'].lower() for w in ['add','new','feat','feature']) else 'Tweak',
+                      'body': (pr.get('body') or '')[:500],
+                      'type': pr_type,
                       'merged_at': pr.get('mergedAt'),
-                      'author': pr.get('author', {}).get('login'),
-                      'url': pr.get('url'),
+                      'author': (pr.get('author') or {}).get('login', 'unknown'),
+                      'url': pr.get('url', ''),
                       'labels': [l.get('name') for l in pr.get('labels', [])]
                   })
+              elif merged:
+                  print(f'  Filtered OUT PR #{pr.get(\"number\")}: merged={merged} < cutoff={cutoff}')
+
+          print(f'After date filtering: {len(filtered_prs)} PRs remain')
 
           # If no PRs, get recent commits
           if not filtered_prs:
+              print('No PRs found, falling back to commits...')
               commits_result = subprocess.run(
                   ['gh', 'api', f'repos/{repo}/commits',
                    '--jq', '.[].commit | {message: .message, date: .committer.date}'],
-                  capture_output=True, text=True, env={**__import__('os').environ}
+                  capture_output=True, text=True, env={**os.environ}
               )
               commits = []
-              for line in commits_result.stdout.strip().split('\n'):
+              for line in commits_result.stdout.strip().split(chr(10)):
                   try:
                       c = json.loads(line)
-                      if c.get('date', '') >= cutoff:
+                      if c.get('date', '')[:19] >= cutoff:
                           commits.append(c)
                   except:
                       pass
+              print(f'Commits found: {len(commits)}')
           else:
               commits = []
 
@@ -223,8 +306,9 @@ jobs:
           with open('pr-data.json', 'w') as f:
               json.dump(output, f, indent=2)
 
-          print(f'PRs collected: {len(filtered_prs)}')
-          print(f'Commits collected: {len(commits)}')
+          print(f'=== FINAL: PRs collected: {len(filtered_prs)}, Commits: {len(commits)} ===')
+          for p in filtered_prs:
+              print(f'  [{p[\"type\"]}] #{p[\"number\"]} {p[\"title\"]}')
           "
           echo "pr_data=$(cat pr-data.json | python3 -c 'import sys,json; print(json.dumps(json.load(sys.stdin)))')" >> $GITHUB_OUTPUT
           echo "last_tag=$(cat pr-data.json | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"last_tag\"])')" >> $GITHUB_OUTPUT
