@@ -601,17 +601,35 @@ jobs:
           diff = fb.get('diff_report', {})
           build_summary = build.get('summary', {})
 
-          # Count changes by type
-          new_count = sum(1 for e in entries if e.get('type') == 'New')
-          fix_count = sum(1 for e in entries if e.get('type') == 'Fix')
-          tweak_count = sum(1 for e in entries if e.get('type') == 'Tweak')
+          # Debug: print what we got
+          print(f'Version: {version}')
+          print(f'Changelog entries: {len(entries)}')
+          for e in entries:
+              print(f'  - [{e.get(\"type\")}] {e.get(\"entry\", \"\")}')
+          print(f'Executive summary length: {len(ai.get(\"executive_summary\", \"\"))}')
+
+          # Count changes by type (case-insensitive)
+          def match_type(entry_type, target):
+              return (entry_type or '').strip().lower() == target.lower()
+
+          new_count = sum(1 for e in entries if match_type(e.get('type'), 'New') or match_type(e.get('type'), 'Feature'))
+          fix_count = sum(1 for e in entries if match_type(e.get('type'), 'Fix') or match_type(e.get('type'), 'Bug Fix'))
+          tweak_count = sum(1 for e in entries if match_type(e.get('type'), 'Tweak') or match_type(e.get('type'), 'Improvement'))
+
+          print(f'Counts - New: {new_count}, Fix: {fix_count}, Tweak: {tweak_count}')
 
           # Build changelog summary text for DB
           changelog_lines = []
           for e in entries:
-              prefix = {'New': '✨', 'Fix': '🔧', 'Tweak': '⚡'}.get(e.get('type',''), '•')
-              changelog_lines.append(f'{prefix} {e.get(\"entry\", \"\")}')
-          changelog_text = chr(10).join(changelog_lines)[:2000]
+              t = (e.get('type', '') or '').strip().lower()
+              if t in ('new', 'feature'):
+                  prefix = '✨'
+              elif t in ('fix', 'bug fix'):
+                  prefix = '🔧'
+              else:
+                  prefix = '⚡'
+              changelog_lines.append(f'{prefix} [{e.get(\"type\", \"Other\")}] {e.get(\"entry\", \"\")}')
+          changelog_text = chr(10).join(changelog_lines)[:2000] if changelog_lines else 'No changelog entries generated'
 
           def text(content, bold=False):
               return {
@@ -736,6 +754,15 @@ jobs:
           # Create Notion page
           release_type = '${{ github.event.inputs.release_type }}'
           summary_text = (ai.get('executive_summary', '') or '')[:2000]
+          if not summary_text:
+              highlights = ai.get('release_highlights', [])
+              if highlights:
+                  summary_text = chr(10).join([f'• {h}' for h in highlights])[:2000]
+              else:
+                  summary_text = 'No summary generated'
+
+          print(f'Summary text length: {len(summary_text)}')
+          print(f'Changelog text length: {len(changelog_text)}')
 
           payload = {
               'parent': {'database_id': db_id},
