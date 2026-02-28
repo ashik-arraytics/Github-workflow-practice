@@ -495,28 +495,58 @@ jobs:
               if raw:
                   break
 
-          if not raw:
-              print('All models failed, using fallback output')
-              raw = '{}'
+          # Build fallback content from PR data (used if AI fails)
+          def build_fallback_from_prs(prs, commits):
+              entries = []
+              for p in prs:
+                  entries.append({'type': p.get('type', 'Tweak'), 'entry': p['title']})
+              if not entries:
+                  for c in commits[:10]:
+                      msg = c.get('message', '').split(chr(10))[0][:100]
+                      if msg:
+                          entries.append({'type': 'Tweak', 'entry': msg})
+              if not entries:
+                  entries.append({'type': 'Tweak', 'entry': 'General improvements and updates'})
 
-          # Clean up response
-          raw = re.sub(r'^[^{]*', '', raw)
-          raw = re.sub(r'[^}]*$', '', raw)
+              highlights = [p['title'] for p in prs[:3]] or ['General updates']
+              pr_descriptions = chr(10).join([f'- {p[\"title\"]}: {(p.get(\"body\") or \"\")[:100]}' for p in prs])
+              summary = f'Release ${{ github.event.inputs.release_version }} includes {len(prs)} merged pull requests. ' + chr(10) + pr_descriptions if prs else 'Routine maintenance release with general improvements.'
 
-          try:
-              output = json.loads(raw)
-          except:
-              output = {
+              return {
                   'version': '${{ github.event.inputs.release_version }}',
-                  'changelog_entries': [{'type': 'Tweak', 'entry': 'General improvements and updates'}],
-                  'executive_summary': raw[:500],
-                  'marketing_blog_draft': '',
-                  'linkedin_post_draft': '',
-                  'reddit_post_draft': '',
-                  'followup_email_draft': '',
-                  'parse_error': True
+                  'changelog_entries': entries,
+                  'executive_summary': summary,
+                  'release_highlights': highlights,
+                  'marketing_blog_draft': f'We are excited to announce version ${{ github.event.inputs.release_version }}. This release includes {len(entries)} changes.',
+                  'linkedin_post_draft': f'New release v${{ github.event.inputs.release_version }} is out! {len(entries)} updates included. #nextjs #webdev #release',
+                  'reddit_post_draft': f'Just released v${{ github.event.inputs.release_version }} with {len(entries)} changes.',
+                  'followup_email_draft': f'Subject: Release v${{ github.event.inputs.release_version }}{chr(10)}{chr(10)}Hi team, we have released version ${{ github.event.inputs.release_version }} with {len(entries)} updates.',
+                  'ai_generated': False
               }
-              print('Warning: JSON parse failed, using fallback')
+
+          if not raw:
+              print('All models failed, building output from PR data directly')
+              output = build_fallback_from_prs(prs, commits)
+          else:
+              # Clean up AI response
+              raw = re.sub(r'^[^{]*', '', raw)
+              raw = re.sub(r'[^}]*$', '', raw)
+
+              try:
+                  output = json.loads(raw)
+                  output['ai_generated'] = True
+                  print(f'AI JSON parsed successfully')
+              except:
+                  print('Warning: AI JSON parse failed, building from PR data')
+                  output = build_fallback_from_prs(prs, commits)
+
+              # Validate AI output has actual content
+              if not output.get('changelog_entries'):
+                  print('Warning: AI returned empty changelog, merging PR data')
+                  fallback = build_fallback_from_prs(prs, commits)
+                  output['changelog_entries'] = fallback['changelog_entries']
+                  if not output.get('executive_summary'):
+                      output['executive_summary'] = fallback['executive_summary']
 
           output['version'] = '${{ github.event.inputs.release_version }}'
           output['generated_at'] = datetime.utcnow().isoformat()
@@ -525,8 +555,14 @@ jobs:
           with open('ai-release-output.json', 'w') as f:
               json.dump(output, f, indent=2, ensure_ascii=False)
 
-          print('AI generation complete')
+          print('=== AI GENERATION RESULT ===')
+          print(f'AI generated: {output.get(\"ai_generated\", \"unknown\")}')
           print(f'Changelog entries: {len(output.get(\"changelog_entries\", []))}')
+          for e in output.get('changelog_entries', []):
+              print(f'  [{e.get(\"type\")}] {e.get(\"entry\", \"\")}')
+          print(f'Summary length: {len(output.get(\"executive_summary\", \"\"))}')
+          print(f'Blog draft length: {len(output.get(\"marketing_blog_draft\", \"\"))}')
+          print('=== END ===')
           "
 
       - name: Run feedback intelligence
@@ -675,6 +711,11 @@ jobs:
 
           with open('ai-release-output.json') as f:
               ai = json.load(f)
+
+          # Debug: dump full AI output to logs
+          print('=== AI RELEASE OUTPUT (full) ===')
+          print(json.dumps(ai, indent=2, ensure_ascii=False)[:3000])
+          print('=== END AI OUTPUT ===')
           with open('feedback-intelligence.json') as f:
               fb = json.load(f)
           with open('build-report.json') as f:
